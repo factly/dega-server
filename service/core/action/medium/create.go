@@ -35,7 +35,7 @@ func create(w http.ResponseWriter, r *http.Request) {
 
 	uID, err := util.GetUser(r.Context())
 	if err != nil {
-		errors.Parser(w, errors.InternalServerError, 500)
+		errors.Render(w, errors.Parser(errors.InternalServerError()), 500)
 		return
 	}
 
