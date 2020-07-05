@@ -45,6 +45,12 @@ func update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	uID, err := util.GetUser(r.Context())
+	if err != nil {
+		errors.Parser(w, errors.InternalServerError, 500)
+		return
+	}
+
 	post := &post{}
 	categories := []model.PostCategory{}
 	tags := []model.PostTag{}
@@ -105,6 +111,9 @@ func update(w http.ResponseWriter, r *http.Request) {
 		FormatID:         post.FormatID,
 		FeaturedMediumID: post.FeaturedMediumID,
 		PublishedDate:    post.PublishedDate,
+		Base: config.Base{
+			UpdatedByID: &uID,
+		},
 	})
 
 	config.DB.Model(&model.Post{}).Preload("Medium").Preload("Format").First(&result.Post)

@@ -35,6 +35,12 @@ func update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	uID, err := util.GetUser(r.Context())
+	if err != nil {
+		errors.Parser(w, errors.InternalServerError, 500)
+		return
+	}
+
 	formatID := chi.URLParam(r, "format_id")
 	id, err := strconv.Atoi(formatID)
 
@@ -72,6 +78,9 @@ func update(w http.ResponseWriter, r *http.Request) {
 		Name:        format.Name,
 		Slug:        formatSlug,
 		Description: format.Description,
+		Base: config.Base{
+			UpdatedByID: &uID,
+		},
 	}).First(&result)
 
 	renderx.JSON(w, http.StatusOK, result)

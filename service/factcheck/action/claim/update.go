@@ -35,6 +35,12 @@ func update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	uID, err := util.GetUser(r.Context())
+	if err != nil {
+		errors.Parser(w, errors.InternalServerError, 500)
+		return
+	}
+
 	claimID := chi.URLParam(r, "claim_id")
 	id, err := strconv.Atoi(claimID)
 
@@ -86,6 +92,9 @@ func update(w http.ResponseWriter, r *http.Request) {
 		Review:        claim.Review,
 		ReviewTagLine: claim.ReviewTagLine,
 		ReviewSources: claim.ReviewSources,
+		Base: config.Base{
+			UpdatedByID: &uID,
+		},
 	}).Preload("Rating").Preload("Claimant").Preload("Rating.Medium").Preload("Claimant.Medium").First(&result)
 
 	renderx.JSON(w, http.StatusOK, result)

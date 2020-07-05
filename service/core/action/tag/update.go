@@ -43,6 +43,12 @@ func update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	uID, err := util.GetUser(r.Context())
+	if err != nil {
+		errors.Parser(w, errors.InternalServerError, 500)
+		return
+	}
+
 	tag := &tag{}
 	json.NewDecoder(r.Body).Decode(&tag)
 
@@ -73,6 +79,9 @@ func update(w http.ResponseWriter, r *http.Request) {
 		Name:        tag.Name,
 		Slug:        tagSlug,
 		Description: tag.Description,
+		Base: config.Base{
+			UpdatedByID: &uID,
+		},
 	}).First(&result)
 
 	renderx.JSON(w, http.StatusOK, result)

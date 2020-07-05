@@ -35,6 +35,12 @@ func update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	uID, err := util.GetUser(r.Context())
+	if err != nil {
+		errors.Parser(w, errors.InternalServerError, 500)
+		return
+	}
+
 	categoryID := chi.URLParam(r, "category_id")
 	id, err := strconv.Atoi(categoryID)
 
@@ -76,6 +82,9 @@ func update(w http.ResponseWriter, r *http.Request) {
 		Description: category.Description,
 		ParentID:    category.ParentID,
 		MediumID:    category.MediumID,
+		Base: config.Base{
+			UpdatedByID: &uID,
+		},
 	}).Preload("Medium").First(&result)
 
 	renderx.JSON(w, http.StatusOK, result)

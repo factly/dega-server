@@ -35,6 +35,12 @@ func create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	uID, err := util.GetUser(r.Context())
+	if err != nil {
+		errors.Parser(w, errors.InternalServerError, 500)
+		return
+	}
+
 	post := post{}
 	result := &postData{}
 	result.Categories = make([]model.Category, 0)
@@ -79,6 +85,8 @@ func create(w http.ResponseWriter, r *http.Request) {
 		PublishedDate:    post.PublishedDate,
 		SpaceID:          post.SpaceID,
 	}
+
+	result.CreatedByID = &uID
 
 	// check categories, tags & medium belong to same space or not
 	err = post.CheckSpace(config.DB)

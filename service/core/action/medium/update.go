@@ -34,6 +34,12 @@ func update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	uID, err := util.GetUser(r.Context())
+	if err != nil {
+		errors.Parser(w, errors.InternalServerError, 500)
+		return
+	}
+
 	mediumID := chi.URLParam(r, "medium_id")
 	id, err := strconv.Atoi(mediumID)
 
@@ -69,6 +75,9 @@ func update(w http.ResponseWriter, r *http.Request) {
 		FileSize:    medium.FileSize,
 		URL:         medium.URL,
 		Dimensions:  medium.Dimensions,
+		Base: config.Base{
+			UpdatedByID: &uID,
+		},
 	}).First(&result)
 
 	renderx.JSON(w, http.StatusOK, result)

@@ -34,6 +34,12 @@ func create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	uID, err := util.GetUser(r.Context())
+	if err != nil {
+		errors.Parser(w, errors.InternalServerError, 500)
+		return
+	}
+
 	category := &category{}
 
 	json.NewDecoder(r.Body).Decode(&category)
@@ -60,6 +66,8 @@ func create(w http.ResponseWriter, r *http.Request) {
 		MediumID:    category.MediumID,
 		SpaceID:     uint(sID),
 	}
+
+	result.CreatedByID = &uID
 
 	err = config.DB.Model(&model.Category{}).Create(&result).Error
 

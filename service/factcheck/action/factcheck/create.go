@@ -37,6 +37,12 @@ func create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	uID, err := util.GetUser(r.Context())
+	if err != nil {
+		errors.Parser(w, errors.InternalServerError, 500)
+		return
+	}
+
 	factcheck := factcheck{}
 	result := &factcheckData{}
 	result.Categories = make([]coreModel.Category, 0)
@@ -81,6 +87,8 @@ func create(w http.ResponseWriter, r *http.Request) {
 		PublishedDate:    factcheck.PublishedDate,
 		SpaceID:          factcheck.SpaceID,
 	}
+
+	result.CreatedByID = &uID
 
 	// check claims, categories, tags & medium belong to same space or not
 	err = factcheck.CheckSpace(config.DB)

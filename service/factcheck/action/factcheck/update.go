@@ -38,6 +38,12 @@ func update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	uID, err := util.GetUser(r.Context())
+	if err != nil {
+		errors.Parser(w, errors.InternalServerError, 500)
+		return
+	}
+
 	factcheckID := chi.URLParam(r, "factcheck_id")
 	id, err := strconv.Atoi(factcheckID)
 
@@ -110,6 +116,9 @@ func update(w http.ResponseWriter, r *http.Request) {
 		IsSticky:         factcheck.IsSticky,
 		FeaturedMediumID: factcheck.FeaturedMediumID,
 		PublishedDate:    factcheck.PublishedDate,
+		Base: config.Base{
+			UpdatedByID: &uID,
+		},
 	})
 
 	config.DB.Model(&model.Factcheck{}).Preload("Medium").First(&result.Factcheck)

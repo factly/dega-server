@@ -33,6 +33,12 @@ func create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	uID, err := util.GetUser(r.Context())
+	if err != nil {
+		errors.Parser(w, errors.InternalServerError, 500)
+		return
+	}
+
 	medium := &medium{}
 
 	json.NewDecoder(r.Body).Decode(&medium)
@@ -57,6 +63,8 @@ func create(w http.ResponseWriter, r *http.Request) {
 		Dimensions:  medium.Dimensions,
 		SpaceID:     uint(sID),
 	}
+
+	result.CreatedByID = &uID
 
 	err = config.DB.Model(&model.Medium{}).Create(&result).Error
 

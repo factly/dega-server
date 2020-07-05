@@ -34,6 +34,12 @@ func create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	uID, err := util.GetUser(r.Context())
+	if err != nil {
+		errors.Parser(w, errors.InternalServerError, 500)
+		return
+	}
+
 	format := &format{}
 
 	json.NewDecoder(r.Body).Decode(&format)
@@ -58,6 +64,8 @@ func create(w http.ResponseWriter, r *http.Request) {
 		Slug:        slug.Approve(formatSlug, sID, config.DB.NewScope(&model.Format{}).TableName()),
 		SpaceID:     uint(sID),
 	}
+
+	result.CreatedByID = &uID
 
 	err = config.DB.Model(&model.Format{}).Create(&result).Error
 

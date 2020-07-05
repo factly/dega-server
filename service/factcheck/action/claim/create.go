@@ -34,6 +34,12 @@ func create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	uID, err := util.GetUser(r.Context())
+	if err != nil {
+		errors.Parser(w, errors.InternalServerError, 500)
+		return
+	}
+
 	claim := &claim{}
 
 	err = json.NewDecoder(r.Body).Decode(&claim)
@@ -71,6 +77,7 @@ func create(w http.ResponseWriter, r *http.Request) {
 		ReviewSources: claim.ReviewSources,
 		SpaceID:       uint(sID),
 	}
+	result.CreatedByID = &uID
 
 	err = config.DB.Model(&model.Claim{}).Create(&result).Error
 
