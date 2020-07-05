@@ -34,7 +34,7 @@ func update(w http.ResponseWriter, r *http.Request) {
 
 	sID, err := util.GetSpace(r.Context())
 	if err != nil {
-		errors.Parser(w, errors.InternalServerError, 500)
+		errors.Render(w, errors.Parser(errors.InternalServerError()), 500)
 		return
 	}
 
@@ -48,7 +48,7 @@ func update(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(factcheckID)
 
 	if err != nil {
-		errors.Parser(w, errors.InvalidID, 404)
+		errors.Render(w, errors.Parser(errors.InvalidID()), 404)
 		return
 	}
 
@@ -60,7 +60,7 @@ func update(w http.ResponseWriter, r *http.Request) {
 
 	err = json.NewDecoder(r.Body).Decode(&factcheck)
 	if err != nil {
-		errors.Parser(w, err.Error(), 422)
+		errors.Render(w, errors.Parser(errors.DecodeError()), 422)
 		return
 	}
 
@@ -80,7 +80,7 @@ func update(w http.ResponseWriter, r *http.Request) {
 	}).First(&result.Factcheck).Error
 
 	if err != nil {
-		errors.Parser(w, err.Error(), 404)
+		errors.Render(w, errors.Parser(errors.DBError()), 404)
 		return
 	}
 
@@ -89,7 +89,7 @@ func update(w http.ResponseWriter, r *http.Request) {
 	err = factcheck.CheckSpace(config.DB)
 
 	if err != nil {
-		errors.Parser(w, err.Error(), 404)
+		errors.Render(w, errors.Parser(errors.DBError()), 404)
 		return
 	}
 
