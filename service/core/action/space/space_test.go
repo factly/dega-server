@@ -10,7 +10,6 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	// os.Setenv("DSN", "postgres://postgres:postgres@localhost:5432/dega?sslmode=disable")
 	err := godotenv.Load("../../../../.env")
 	_ = err
 

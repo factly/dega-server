@@ -16,10 +16,9 @@ var DB *gorm.DB
 func SetupDB() {
 
 	//  TEST ENVIRONMENT SET UP
-	IP := os.Getenv("IP_ADDR")
+	TESTDSN := os.Getenv("TESTDSN")
 	var err error
-	dburl := fmt.Sprintf("postgres://postgres:postgres@" + IP + ":5432/dega?sslmode=disable")
-	DB, err = gorm.Open("postgres", dburl)
+	DB, err = gorm.Open("postgres", TESTDSN)
 
 	// DEPLOYMENT SETUP
 	// DSN := os.Getenv("DSN")
