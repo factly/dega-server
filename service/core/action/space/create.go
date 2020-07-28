@@ -35,7 +35,7 @@ func create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	space := &space{}
+	space := &model.Space{}
 
 	json.NewDecoder(r.Body).Decode(&space)
 

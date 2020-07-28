@@ -34,7 +34,8 @@ func create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	category := &category{}
+	// category := &category{}
+	category := &model.Category{}
 
 	json.NewDecoder(r.Body).Decode(&category)
 
