@@ -7,10 +7,11 @@ import (
 	"os"
 	"strings"
 
-	"github.com/factly/dega-server/errors"
 	"github.com/factly/dega-server/service/core/action/author"
 	"github.com/factly/dega-server/service/core/model"
 	"github.com/factly/dega-server/util"
+	"github.com/factly/x/errorx"
+	"github.com/factly/x/loggerx"
 	"github.com/factly/x/paginationx"
 	"github.com/factly/x/renderx"
 )
@@ -28,7 +29,8 @@ func list(w http.ResponseWriter, r *http.Request) {
 	resp, err := client.Do(req)
 
 	if err != nil {
-		errors.Render(w, errors.Parser(errors.NetworkError()), 503)
+		loggerx.Error(err)
+		errorx.Render(w, errorx.Parser(errorx.NetworkError()))
 		return
 	}
 
@@ -41,18 +43,24 @@ func list(w http.ResponseWriter, r *http.Request) {
 	userID, err := util.GetUser(r.Context())
 
 	if err != nil {
+		loggerx.Error(err)
+		errorx.Render(w, errorx.Parser(errorx.InternalServerError()))
 		return
 	}
 
 	spaceID, err := util.GetSpace(r.Context())
 
 	if err != nil {
+		loggerx.Error(err)
+		errorx.Render(w, errorx.Parser(errorx.InternalServerError()))
 		return
 	}
 
-	organisationID, err := util.GetOrganization(r.Context())
+	organisationID, err := util.GetOrganisation(r.Context())
 
 	if err != nil {
+		loggerx.Error(err)
+		errorx.Render(w, errorx.Parser(errorx.InternalServerError()))
 		return
 	}
 

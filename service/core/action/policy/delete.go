@@ -5,8 +5,9 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/factly/dega-server/errors"
 	"github.com/factly/dega-server/util"
+	"github.com/factly/x/errorx"
+	"github.com/factly/x/loggerx"
 	"github.com/factly/x/renderx"
 	"github.com/go-chi/chi"
 )
@@ -15,12 +16,16 @@ func delete(w http.ResponseWriter, r *http.Request) {
 	spaceID, err := util.GetSpace(r.Context())
 
 	if err != nil {
+		loggerx.Error(err)
+		errorx.Render(w, errorx.Parser(errorx.InternalServerError()))
 		return
 	}
 
-	organisationID, err := util.GetOrganization(r.Context())
+	organisationID, err := util.GetOrganisation(r.Context())
 
 	if err != nil {
+		loggerx.Error(err)
+		errorx.Render(w, errorx.Parser(errorx.InternalServerError()))
 		return
 	}
 
@@ -36,7 +41,8 @@ func delete(w http.ResponseWriter, r *http.Request) {
 	resp, err := client.Do(req)
 
 	if err != nil {
-		errors.Render(w, errors.Parser(errors.NetworkError()), 503)
+		loggerx.Error(err)
+		errorx.Render(w, errorx.Parser(errorx.NetworkError()))
 		return
 	}
 

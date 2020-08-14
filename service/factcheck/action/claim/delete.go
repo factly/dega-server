@@ -1,13 +1,15 @@
 package claim
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
 	"github.com/factly/dega-server/config"
-	"github.com/factly/dega-server/errors"
 	"github.com/factly/dega-server/service/factcheck/model"
 	"github.com/factly/dega-server/util"
+	"github.com/factly/x/errorx"
+	"github.com/factly/x/loggerx"
 	"github.com/factly/x/renderx"
 	"github.com/go-chi/chi"
 )
@@ -26,7 +28,8 @@ func delete(w http.ResponseWriter, r *http.Request) {
 
 	sID, err := util.GetSpace(r.Context())
 	if err != nil {
-		errors.Render(w, errors.Parser(errors.InternalServerError()), 500)
+		loggerx.Error(err)
+		errorx.Render(w, errorx.Parser(errorx.InternalServerError()))
 		return
 	}
 
@@ -34,7 +37,8 @@ func delete(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(claimID)
 
 	if err != nil {
-		errors.Render(w, errors.Parser(errors.InvalidID()), 404)
+		loggerx.Error(err)
+		errorx.Render(w, errorx.Parser(errorx.InvalidID()))
 		return
 	}
 
@@ -48,7 +52,20 @@ func delete(w http.ResponseWriter, r *http.Request) {
 	}).First(&result).Error
 
 	if err != nil {
-		errors.Render(w, errors.Parser(errors.DBError()), 404)
+		loggerx.Error(err)
+		errorx.Render(w, errorx.Parser(errorx.RecordNotFound()))
+		return
+	}
+
+	// check if claim is associated with posts
+	var totAssociated int
+	config.DB.Model(&model.PostClaim{}).Where(&model.PostClaim{
+		ClaimID: uint(id),
+	}).Count(&totAssociated)
+
+	if totAssociated != 0 {
+		loggerx.Error(errors.New("claim is associated with post"))
+		errorx.Render(w, errorx.Parser(errorx.CannotSaveChanges()))
 		return
 	}
 

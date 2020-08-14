@@ -31,31 +31,19 @@ import (
 // @license.name Apache 2.0
 // @license.url http://www.apache.org/licenses/LICENSE-2.0.html
 
-// @host localhost:8820
+// @host localhost:8000
 // @BasePath /
 func main() {
 
 	godotenv.Load()
 
-	port, ok := os.LookupEnv("PORT")
-	if !ok {
-		port = "8820"
-	}
-
-	port = ":" + port
-
 	// db setup
 	config.SetupDB()
-
-	// open log file
-	file, err := os.OpenFile("logrus.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
-	if err == nil {
-		r.Use(loggerx.NewLogger(file))
-	}
+	r.Use(loggerx.Init())
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Heartbeat("/ping"))
@@ -71,13 +59,14 @@ func main() {
 		MaxAge:           300, // Maximum value not ignored by any of major browsers
 	}))
 
-	/* disable swagger in production */
-	r.Get("/swagger/*", httpSwagger.WrapHandler)
+	if envName, _ := os.LookupEnv("ENVIRONMENT_NAME"); envName == "development" {
+		r.Get("/swagger/*", httpSwagger.WrapHandler)
+	}
 
-	r.With(util.CheckUser, util.CheckSpace, util.GenerateOrgnaization, policy.Authorizer).Group(func(r chi.Router) {
+	r.With(util.CheckUser, util.CheckSpace, util.GenerateOrganisation, policy.Authorizer).Group(func(r chi.Router) {
 		r.Mount("/factcheck", factcheck.Router())
 		r.Mount("/core", core.Router())
 	})
 
-	http.ListenAndServe(port, r)
+	http.ListenAndServe(":8000", r)
 }

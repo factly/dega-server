@@ -2,15 +2,18 @@ package post
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 
 	"github.com/factly/dega-server/config"
-	"github.com/factly/dega-server/errors"
 	"github.com/factly/dega-server/service/core/action/author"
 	"github.com/factly/dega-server/service/core/model"
+	factcheckModel "github.com/factly/dega-server/service/factcheck/model"
 	"github.com/factly/dega-server/util"
 	"github.com/factly/dega-server/util/slug"
+	"github.com/factly/x/errorx"
+	"github.com/factly/x/loggerx"
 	"github.com/factly/x/renderx"
 	"github.com/factly/x/validationx"
 )
@@ -31,7 +34,8 @@ func create(w http.ResponseWriter, r *http.Request) {
 
 	sID, err := util.GetSpace(r.Context())
 	if err != nil {
-		errors.Render(w, errors.Parser(errors.InternalServerError()), 500)
+		loggerx.Error(err)
+		errorx.Render(w, errorx.Parser(errorx.InternalServerError()))
 		return
 	}
 
@@ -43,21 +47,22 @@ func create(w http.ResponseWriter, r *http.Request) {
 
 	post := post{}
 	result := &postData{}
-	result.Categories = make([]model.Category, 0)
-	result.Tags = make([]model.Tag, 0)
 	result.Authors = make([]model.Author, 0)
+	result.Claims = make([]factcheckModel.Claim, 0)
 
 	err = json.NewDecoder(r.Body).Decode(&post)
 
 	if err != nil {
-		errors.Render(w, errors.Parser(errors.DecodeError()), 422)
+		loggerx.Error(err)
+		errorx.Render(w, errorx.Parser(errorx.DecodeError()))
 		return
 	}
 
 	validationError := validationx.Check(post)
 
 	if validationError != nil {
-		errors.Render(w, validationError, 422)
+		loggerx.Error(errors.New("validation error"))
+		errorx.Render(w, validationError)
 		return
 	}
 
@@ -91,55 +96,56 @@ func create(w http.ResponseWriter, r *http.Request) {
 	// check categories, tags & medium belong to same space or not
 	err = post.CheckSpace(config.DB)
 	if err != nil {
-		errors.Render(w, errors.Parser(errors.DBError()), 404)
+		loggerx.Error(err)
+		errorx.Render(w, errorx.Parser(errorx.DBError()))
 		return
 	}
 
-	err = config.DB.Model(&model.Post{}).Create(&result.Post).Error
+	config.DB.Model(&model.Tag{}).Where(post.TagIDs).Find(&result.Post.Tags)
+	config.DB.Model(&model.Category{}).Where(post.CategoryIDs).Find(&result.Post.Categories)
+
+	err = config.DB.Model(&model.Post{}).Set("gorm:association_autoupdate", false).Create(&result.Post).Error
 
 	if err != nil {
+		loggerx.Error(err)
+		errorx.Render(w, errorx.Parser(errorx.DBError()))
 		return
 	}
 
-	config.DB.Model(&model.Post{}).Preload("Medium").Preload("Format").First(&result.Post)
+	config.DB.Model(&model.Post{}).Preload("Medium").Preload("Format").Preload("Tags").Preload("Categories").First(&result.Post)
 
-	// create post category & fetch categories
-	for _, id := range post.CategoryIDS {
-		postCategory := &model.PostCategory{}
+	if result.Format.Slug == "factcheck" {
+		// create post claim
+		for _, id := range post.ClaimIDs {
+			postClaim := &factcheckModel.PostClaim{}
+			postClaim.ClaimID = uint(id)
+			postClaim.PostID = result.ID
 
-		postCategory.CategoryID = uint(id)
-		postCategory.PostID = result.ID
-
-		err = config.DB.Model(&model.PostCategory{}).Create(&postCategory).Error
-
-		if err != nil {
-			return
+			err = config.DB.Model(&factcheckModel.PostClaim{}).Create(&postClaim).Error
+			if err != nil {
+				loggerx.Error(err)
+				errorx.Render(w, errorx.Parser(errorx.DBError()))
+				return
+			}
 		}
-		config.DB.Model(&model.PostCategory{}).Preload("Category").Preload("Category.Medium").First(&postCategory)
-		result.Categories = append(result.Categories, postCategory.Category)
-	}
 
-	// create post tag & fetch tags
-	for _, id := range post.TagIDS {
-		postTag := &model.PostTag{}
+		// fetch all post claims
+		postClaims := []factcheckModel.PostClaim{}
+		config.DB.Model(&factcheckModel.PostClaim{}).Where(&factcheckModel.PostClaim{
+			PostID: result.ID,
+		}).Preload("Claim").Preload("Claim.Claimant").Preload("Claim.Claimant.Medium").Preload("Claim.Rating").Preload("Claim.Rating.Medium").Find(&postClaims)
 
-		postTag.TagID = uint(id)
-		postTag.PostID = result.ID
-
-		err = config.DB.Model(&model.PostTag{}).Create(&postTag).Error
-
-		if err != nil {
-			return
+		// appending all post claims
+		for _, postClaim := range postClaims {
+			result.Claims = append(result.Claims, postClaim.Claim)
 		}
-		config.DB.Model(&model.PostTag{}).Preload("Tag").First(&postTag)
-		result.Tags = append(result.Tags, postTag.Tag)
 	}
 
 	// Adding author
 	authors, err := author.All(r.Context())
-	for _, id := range post.AuthorIDS {
+	for _, id := range post.AuthorIDs {
 		aID := fmt.Sprint(id)
-		if authors[aID].Email != "" {
+		if _, found := authors[aID]; found {
 			author := model.PostAuthor{
 				AuthorID: id,
 				PostID:   result.Post.ID,

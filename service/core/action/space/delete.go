@@ -8,9 +8,10 @@ import (
 	"strconv"
 
 	"github.com/factly/dega-server/config"
-	"github.com/factly/dega-server/errors"
 	"github.com/factly/dega-server/service/core/model"
 	"github.com/factly/dega-server/util"
+	"github.com/factly/x/errorx"
+	"github.com/factly/x/loggerx"
 	"github.com/factly/x/renderx"
 )
 
@@ -29,7 +30,8 @@ import (
 func delete(w http.ResponseWriter, r *http.Request) {
 	uID, err := util.GetUser(r.Context())
 	if err != nil {
-		errors.Render(w, errors.Parser(errors.InternalServerError()), 500)
+		loggerx.Error(err)
+		errorx.Render(w, errorx.Parser(errorx.InternalServerError()))
 		return
 	}
 
@@ -41,7 +43,8 @@ func delete(w http.ResponseWriter, r *http.Request) {
 	// check record exists or not
 	err = config.DB.First(&result).Error
 	if err != nil {
-		errors.Render(w, errors.Parser(errors.RecordNotFound()), 404)
+		loggerx.Error(err)
+		errorx.Render(w, errorx.Parser(errorx.RecordNotFound()))
 		return
 	}
 
@@ -49,7 +52,7 @@ func delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	req, err := http.NewRequest("GET", os.Getenv("KAVACH_URL")+"/organizations/"+strconv.Itoa(result.OrganisationID), nil)
+	req, err := http.NewRequest("GET", os.Getenv("KAVACH_URL")+"/organisations/"+strconv.Itoa(result.OrganisationID), nil)
 	req.Header.Set("X-User", strconv.Itoa(uID))
 	req.Header.Set("Content-Type", "application/json")
 
@@ -57,7 +60,8 @@ func delete(w http.ResponseWriter, r *http.Request) {
 	resp, err := client.Do(req)
 
 	if err != nil {
-		errors.Render(w, errors.Parser(errors.NetworkError()), 503)
+		loggerx.Error(err)
+		errorx.Render(w, errorx.Parser(errorx.NetworkError()))
 		return
 	}
 

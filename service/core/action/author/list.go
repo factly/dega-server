@@ -7,9 +7,11 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/factly/dega-server/errors"
+	"github.com/factly/x/loggerx"
+
 	"github.com/factly/dega-server/service/core/model"
 	"github.com/factly/dega-server/util"
+	"github.com/factly/x/errorx"
 	"github.com/factly/x/paginationx"
 	"github.com/factly/x/renderx"
 )
@@ -35,16 +37,25 @@ type paging struct {
 func list(w http.ResponseWriter, r *http.Request) {
 
 	uID, err := util.GetUser(r.Context())
-	oID, err := util.GetOrganization(r.Context())
 
 	if err != nil {
+		loggerx.Error(err)
+		errorx.Render(w, errorx.Parser(errorx.InternalServerError()))
+		return
+	}
+
+	oID, err := util.GetOrganisation(r.Context())
+
+	if err != nil {
+		loggerx.Error(err)
+		errorx.Render(w, errorx.Parser(errorx.InternalServerError()))
 		return
 	}
 
 	result := paging{}
 	result.Nodes = make([]model.Author, 0)
 
-	url := fmt.Sprint(os.Getenv("KAVACH_URL"), "/organizations/", oID, "/users")
+	url := fmt.Sprint(os.Getenv("KAVACH_URL"), "/organisations/", oID, "/users")
 
 	req, err := http.NewRequest("GET", url, nil)
 	req.Header.Set("Content-Type", "application/json")
@@ -53,7 +64,8 @@ func list(w http.ResponseWriter, r *http.Request) {
 	resp, err := client.Do(req)
 
 	if err != nil {
-		errors.Render(w, errors.Parser(errors.NetworkError()), 503)
+		loggerx.Error(err)
+		errorx.Render(w, errorx.Parser(errorx.NetworkError()))
 		return
 	}
 

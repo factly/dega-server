@@ -1,13 +1,15 @@
 package category
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
 	"github.com/factly/dega-server/config"
-	"github.com/factly/dega-server/errors"
 	"github.com/factly/dega-server/service/core/model"
 	"github.com/factly/dega-server/util"
+	"github.com/factly/x/errorx"
+	"github.com/factly/x/loggerx"
 	"github.com/factly/x/renderx"
 	"github.com/go-chi/chi"
 )
@@ -29,13 +31,15 @@ func delete(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(categoryID)
 
 	if err != nil {
-		errors.Render(w, errors.Parser(errors.InvalidID()), 404)
+		loggerx.Error(err)
+		errorx.Render(w, errorx.Parser(errorx.InvalidID()))
 		return
 	}
 
 	sID, err := util.GetSpace(r.Context())
 	if err != nil {
-		errors.Render(w, errors.Parser(errors.InternalServerError()), 500)
+		loggerx.Error(err)
+		errorx.Render(w, errorx.Parser(errorx.InternalServerError()))
 		return
 	}
 
@@ -49,11 +53,44 @@ func delete(w http.ResponseWriter, r *http.Request) {
 	}).First(&result).Error
 
 	if err != nil {
-		errors.Render(w, errors.Parser(errors.RecordNotFound()), 404)
+		loggerx.Error(err)
+		errorx.Render(w, errorx.Parser(errorx.RecordNotFound()))
 		return
 	}
 
-	config.DB.Delete(&result)
+	// check if the category is associated with posts
+	category := new(model.Category)
+	category.ID = uint(id)
+	totAssociated := config.DB.Model(category).Association("Posts").Count()
+
+	if totAssociated != 0 {
+		loggerx.Error(errors.New("category is associated with post"))
+		errorx.Render(w, errorx.Parser(errorx.CannotSaveChanges()))
+		return
+	}
+
+	tx := config.DB.Begin()
+	// Updates all children categories
+	err = tx.Model(model.Category{}).Where(&model.Category{
+		SpaceID:  uint(sID),
+		ParentID: result.ID,
+	}).Updates(map[string]interface{}{"parent_id": nil}).Error
+
+	if err != nil {
+		tx.Rollback()
+		loggerx.Error(err)
+		errorx.Render(w, errorx.Parser(errorx.InternalServerError()))
+		return
+	}
+
+	err = tx.Delete(&result).Error
+	if err != nil {
+		tx.Rollback()
+		loggerx.Error(err)
+		errorx.Render(w, errorx.Parser(errorx.InternalServerError()))
+		return
+	}
+	tx.Commit()
 
 	renderx.JSON(w, http.StatusOK, nil)
 }

@@ -2,13 +2,15 @@ package claim
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/factly/dega-server/config"
-	"github.com/factly/dega-server/errors"
 	"github.com/factly/dega-server/service/factcheck/model"
 	"github.com/factly/dega-server/util"
 	"github.com/factly/dega-server/util/slug"
+	"github.com/factly/x/errorx"
+	"github.com/factly/x/loggerx"
 	"github.com/factly/x/renderx"
 	"github.com/factly/x/validationx"
 )
@@ -30,7 +32,8 @@ func create(w http.ResponseWriter, r *http.Request) {
 
 	sID, err := util.GetSpace(r.Context())
 	if err != nil {
-		errors.Render(w, errors.Parser(errors.InternalServerError()), 500)
+		loggerx.Error(err)
+		errorx.Render(w, errorx.Parser(errorx.InternalServerError()))
 		return
 	}
 
@@ -45,14 +48,16 @@ func create(w http.ResponseWriter, r *http.Request) {
 	err = json.NewDecoder(r.Body).Decode(&claim)
 
 	if err != nil {
-		errors.Render(w, errors.Parser(errors.DecodeError()), 422)
+		loggerx.Error(err)
+		errorx.Render(w, errorx.Parser(errorx.DecodeError()))
 		return
 	}
 
 	validationError := validationx.Check(claim)
 
 	if validationError != nil {
-		errors.Render(w, validationError, 422)
+		loggerx.Error(errors.New("validation error"))
+		errorx.Render(w, validationError)
 		return
 	}
 
@@ -82,6 +87,8 @@ func create(w http.ResponseWriter, r *http.Request) {
 	err = config.DB.Model(&model.Claim{}).Create(&result).Error
 
 	if err != nil {
+		loggerx.Error(err)
+		errorx.Render(w, errorx.Parser(errorx.DBError()))
 		return
 	}
 

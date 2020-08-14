@@ -5,9 +5,10 @@ import (
 	"strconv"
 
 	"github.com/factly/dega-server/config"
-	"github.com/factly/dega-server/errors"
 	"github.com/factly/dega-server/service/core/model"
 	"github.com/factly/dega-server/util"
+	"github.com/factly/x/errorx"
+	"github.com/factly/x/loggerx"
 	"github.com/factly/x/renderx"
 	"github.com/go-chi/chi"
 )
@@ -26,7 +27,8 @@ func delete(w http.ResponseWriter, r *http.Request) {
 
 	sID, err := util.GetSpace(r.Context())
 	if err != nil {
-		errors.Render(w, errors.Parser(errors.InternalServerError()), 500)
+		loggerx.Error(err)
+		errorx.Render(w, errorx.Parser(errorx.InternalServerError()))
 		return
 	}
 
@@ -34,7 +36,8 @@ func delete(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(postID)
 
 	if err != nil {
-		errors.Render(w, errors.Parser(errors.InvalidID()), 404)
+		loggerx.Error(err)
+		errorx.Render(w, errorx.Parser(errorx.InvalidID()))
 		return
 	}
 
@@ -48,19 +51,10 @@ func delete(w http.ResponseWriter, r *http.Request) {
 	}).First(&result).Error
 
 	if err != nil {
-		errors.Render(w, errors.Parser(errors.RecordNotFound()), 404)
+		loggerx.Error(err)
+		errorx.Render(w, errorx.Parser(errorx.RecordNotFound()))
 		return
 	}
-
-	// delete all tags related to post
-	config.DB.Where(&model.PostTag{
-		PostID: uint(id),
-	}).Delete(model.PostTag{})
-
-	// delete all categories related to post
-	config.DB.Where(&model.PostCategory{
-		PostID: uint(id),
-	}).Delete(model.PostCategory{})
 
 	config.DB.Model(&model.Post{}).Delete(&result)
 

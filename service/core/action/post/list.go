@@ -5,10 +5,12 @@ import (
 	"net/http"
 
 	"github.com/factly/dega-server/config"
-	"github.com/factly/dega-server/errors"
 	"github.com/factly/dega-server/service/core/action/author"
 	"github.com/factly/dega-server/service/core/model"
+	factcheckModel "github.com/factly/dega-server/service/factcheck/model"
 	"github.com/factly/dega-server/util"
+	"github.com/factly/x/errorx"
+	"github.com/factly/x/loggerx"
 	"github.com/factly/x/paginationx"
 	"github.com/factly/x/renderx"
 )
@@ -29,18 +31,35 @@ type paging struct {
 // @Param X-Space header string true "Space ID"
 // @Param limit query string false "limit per page"
 // @Param page query string false "page number"
+// @Param format query string false "format type"
 // @Success 200 {array} postData
 // @Router /core/posts [get]
 func list(w http.ResponseWriter, r *http.Request) {
 
 	sID, err := util.GetSpace(r.Context())
 	if err != nil {
-		errors.Render(w, errors.Parser(errors.InternalServerError()), 500)
+		loggerx.Error(err)
+		errorx.Render(w, errorx.Parser(errorx.InternalServerError()))
 		return
 	}
 
-	if err != nil {
-		return
+	tx := config.DB.Preload("Medium").Preload("Tags").Preload("Categories").Preload("Format").Model(&model.Post{}).Where(&model.Post{
+		SpaceID: uint(sID),
+	})
+
+	format := r.URL.Query().Get("format")
+
+	if format != "" {
+		f := model.Format{}
+		err = config.DB.Where(&model.Format{
+			SpaceID: uint(sID),
+			Slug:    format,
+		}).First(&f).Error
+		if err == nil {
+			tx = tx.Where(&model.Post{
+				FormatID: f.ID,
+			})
+		}
 	}
 
 	result := paging{}
@@ -50,60 +69,61 @@ func list(w http.ResponseWriter, r *http.Request) {
 
 	offset, limit := paginationx.Parse(r.URL.Query())
 
-	err = config.DB.Model(&model.Post{}).Preload("Medium").Preload("Format").Where(&model.Post{
-		SpaceID: uint(sID),
-	}).Count(&result.Total).Order("id desc").Offset(offset).Limit(limit).Find(&posts).Error
+	err = tx.Count(&result.Total).Order("id desc").Offset(offset).Limit(limit).Find(&posts).Error
 
 	if err != nil {
+		loggerx.Error(err)
+		errorx.Render(w, errorx.Parser(errorx.DBError()))
 		return
+	}
+
+	var postIDs []uint
+	for _, p := range posts {
+		postIDs = append(postIDs, p.ID)
+	}
+
+	// fetch all claims related to posts
+	postClaims := []factcheckModel.PostClaim{}
+	config.DB.Model(&factcheckModel.PostClaim{}).Where("post_id in (?)", postIDs).Preload("Claim").Preload("Claim.Claimant").Preload("Claim.Claimant.Medium").Preload("Claim.Rating").Preload("Claim.Rating.Medium").Find(&postClaims)
+
+	postClaimMap := make(map[uint][]factcheckModel.Claim)
+	for _, pc := range postClaims {
+		if _, found := postClaimMap[pc.PostID]; !found {
+			postClaimMap[pc.PostID] = make([]factcheckModel.Claim, 0)
+		}
+		postClaimMap[pc.PostID] = append(postClaimMap[pc.PostID], pc.Claim)
 	}
 
 	// fetch all authors
 	authors, err := author.All(r.Context())
 
+	// fetch all authors related to posts
+	postAuthors := []model.PostAuthor{}
+	config.DB.Model(&model.PostAuthor{}).Where("post_id in (?)", postIDs).Find(&postAuthors)
+
+	postAuthorMap := make(map[uint][]uint)
+	for _, po := range postAuthors {
+		if _, found := postAuthorMap[po.PostID]; !found {
+			postAuthorMap[po.PostID] = make([]uint, 0)
+		}
+		postAuthorMap[po.PostID] = append(postAuthorMap[po.PostID], po.AuthorID)
+	}
+
 	for _, post := range posts {
 		postList := &postData{}
-		categories := []model.PostCategory{}
-		tags := []model.PostTag{}
-		postAuthors := []model.PostAuthor{}
 
-		postList.Categories = make([]model.Category, 0)
-		postList.Tags = make([]model.Tag, 0)
 		postList.Authors = make([]model.Author, 0)
-
+		postList.Claims = postClaimMap[post.ID]
 		postList.Post = post
 
-		// fetch all categories
-		config.DB.Model(&model.PostCategory{}).Where(&model.PostCategory{
-			PostID: post.ID,
-		}).Preload("Category").Preload("Category.Medium").Find(&categories)
+		postAuthors, hasEle := postAuthorMap[post.ID]
 
-		// fetch all tags
-		config.DB.Model(&model.PostTag{}).Where(&model.PostTag{
-			PostID: post.ID,
-		}).Preload("Tag").Find(&tags)
-
-		// fetch all post authors
-		config.DB.Model(&model.PostAuthor{}).Where(&model.PostAuthor{
-			PostID: post.ID,
-		}).Find(&postAuthors)
-
-		for _, c := range categories {
-			if c.Category.ID != 0 {
-				postList.Categories = append(postList.Categories, c.Category)
-			}
-		}
-
-		for _, t := range tags {
-			if t.Tag.ID != 0 {
-				postList.Tags = append(postList.Tags, t.Tag)
-			}
-		}
-
-		for _, postAuthor := range postAuthors {
-			aID := fmt.Sprint(postAuthor.AuthorID)
-			if authors[aID].Email != "" {
-				postList.Authors = append(postList.Authors, authors[aID])
+		if hasEle {
+			for _, postAuthor := range postAuthors {
+				aID := fmt.Sprint(postAuthor)
+				if author, found := authors[aID]; found {
+					postList.Authors = append(postList.Authors, author)
+				}
 			}
 		}
 

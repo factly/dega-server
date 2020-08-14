@@ -6,10 +6,11 @@ import (
 	"strconv"
 
 	"github.com/factly/dega-server/config"
-	"github.com/factly/dega-server/errors"
 	"github.com/factly/dega-server/service/factcheck/model"
 	"github.com/factly/dega-server/util"
 	"github.com/factly/dega-server/util/slug"
+	"github.com/factly/x/errorx"
+	"github.com/factly/x/loggerx"
 	"github.com/factly/x/renderx"
 	"github.com/go-chi/chi"
 )
@@ -31,7 +32,8 @@ func update(w http.ResponseWriter, r *http.Request) {
 
 	sID, err := util.GetSpace(r.Context())
 	if err != nil {
-		errors.Render(w, errors.Parser(errors.InternalServerError()), 500)
+		loggerx.Error(err)
+		errorx.Render(w, errorx.Parser(errorx.InternalServerError()))
 		return
 	}
 
@@ -45,7 +47,8 @@ func update(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(claimID)
 
 	if err != nil {
-		errors.Render(w, errors.Parser(errors.InvalidID()), 404)
+		loggerx.Error(err)
+		errorx.Render(w, errorx.Parser(errorx.InvalidID()))
 		return
 	}
 
@@ -53,7 +56,8 @@ func update(w http.ResponseWriter, r *http.Request) {
 	err = json.NewDecoder(r.Body).Decode(&claim)
 
 	if err != nil {
-		errors.Render(w, errors.Parser(errors.DecodeError()), 422)
+		loggerx.Error(err)
+		errorx.Render(w, errorx.Parser(errorx.DecodeError()))
 		return
 	}
 
@@ -61,12 +65,13 @@ func update(w http.ResponseWriter, r *http.Request) {
 	result.ID = uint(id)
 
 	// check record exists or not
-	err = config.DB.Where(&model.Claimant{
+	err = config.DB.Where(&model.Claim{
 		SpaceID: uint(sID),
 	}).First(&result).Error
 
 	if err != nil {
-		errors.Render(w, errors.Parser(errors.DBError()), 404)
+		loggerx.Error(err)
+		errorx.Render(w, errorx.Parser(errorx.DBError()))
 		return
 	}
 

@@ -6,10 +6,11 @@ import (
 	"strconv"
 
 	"github.com/factly/dega-server/config"
-	"github.com/factly/dega-server/errors"
 	"github.com/factly/dega-server/service/factcheck/model"
 	"github.com/factly/dega-server/util"
 	"github.com/factly/dega-server/util/slug"
+	"github.com/factly/x/errorx"
+	"github.com/factly/x/loggerx"
 	"github.com/factly/x/renderx"
 	"github.com/go-chi/chi"
 )
@@ -31,7 +32,8 @@ func update(w http.ResponseWriter, r *http.Request) {
 
 	sID, err := util.GetSpace(r.Context())
 	if err != nil {
-		errors.Render(w, errors.Parser(errors.InternalServerError()), 500)
+		loggerx.Error(err)
+		errorx.Render(w, errorx.Parser(errorx.InternalServerError()))
 		return
 	}
 
@@ -45,7 +47,8 @@ func update(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(claimantID)
 
 	if err != nil {
-		errors.Render(w, errors.Parser(errors.InvalidID()), 404)
+		loggerx.Error(err)
+		errorx.Render(w, errorx.Parser(errorx.InvalidID()))
 		return
 	}
 
@@ -61,7 +64,8 @@ func update(w http.ResponseWriter, r *http.Request) {
 	}).First(&result).Error
 
 	if err != nil {
-		errors.Render(w, errors.Parser(errors.RecordNotFound()), 404)
+		loggerx.Error(err)
+		errorx.Render(w, errorx.Parser(errorx.RecordNotFound()))
 		return
 	}
 

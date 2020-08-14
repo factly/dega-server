@@ -7,11 +7,14 @@ import (
 	"strconv"
 
 	"github.com/factly/dega-server/config"
-	"github.com/factly/dega-server/errors"
 	"github.com/factly/dega-server/service/core/action/author"
 	"github.com/factly/dega-server/service/core/model"
+	factcheckModel "github.com/factly/dega-server/service/factcheck/model"
 	"github.com/factly/dega-server/util"
+	"github.com/factly/dega-server/util/arrays"
 	"github.com/factly/dega-server/util/slug"
+	"github.com/factly/x/errorx"
+	"github.com/factly/x/loggerx"
 	"github.com/factly/x/renderx"
 	"github.com/go-chi/chi"
 )
@@ -35,13 +38,15 @@ func update(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(postID)
 
 	if err != nil {
-		errors.Render(w, errors.Parser(errors.InvalidID()), 404)
+		loggerx.Error(err)
+		errorx.Render(w, errorx.Parser(errorx.InvalidID()))
 		return
 	}
 
 	sID, err := util.GetSpace(r.Context())
 	if err != nil {
-		errors.Render(w, errors.Parser(errors.InternalServerError()), 500)
+		loggerx.Error(err)
+		errorx.Render(w, errorx.Parser(errorx.InternalServerError()))
 		return
 	}
 
@@ -52,19 +57,21 @@ func update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	post := &post{}
-	categories := []model.PostCategory{}
-	tags := []model.PostTag{}
 	postAuthors := []model.PostAuthor{}
+	postClaims := []factcheckModel.PostClaim{}
 
 	err = json.NewDecoder(r.Body).Decode(&post)
 
-	errors.Render(w, errors.Parser(errors.DecodeError()), 422)
+	if err != nil {
+		loggerx.Error(err)
+		errorx.Render(w, errorx.Parser(errorx.DecodeError()))
+		return
+	}
 
 	result := &postData{}
 	result.ID = uint(id)
-	result.Tags = make([]model.Tag, 0)
-	result.Categories = make([]model.Category, 0)
 	result.Authors = make([]model.Author, 0)
+	result.Claims = make([]factcheckModel.Claim, 0)
 
 	// fetch all authors
 	authors, err := author.All(r.Context())
@@ -72,19 +79,31 @@ func update(w http.ResponseWriter, r *http.Request) {
 	// check record exists or not
 	err = config.DB.Where(&model.Post{
 		SpaceID: uint(sID),
-	}).First(&result.Post).Error
+	}).Preload("Tags").Preload("Categories").First(&result.Post).Error
 
 	if err != nil {
-		errors.Render(w, errors.Parser(errors.DBError()), 404)
+		loggerx.Error(err)
+		errorx.Render(w, errorx.Parser(errorx.RecordNotFound()))
 		return
 	}
+
+	// Fetching old and new tags related to post
+	oldTags := result.Post.Tags
+	newTags := make([]model.Tag, 0)
+	config.DB.Model(&model.Tag{}).Where(post.TagIDs).Find(&newTags)
+
+	// Fetching old and new categories related to post
+	oldCategories := result.Post.Categories
+	newCategories := make([]model.Category, 0)
+	config.DB.Model(&model.Category{}).Where(post.CategoryIDs).Find(&newCategories)
 
 	post.SpaceID = result.SpaceID
 
 	err = post.CheckSpace(config.DB)
 
 	if err != nil {
-		errors.Render(w, errors.Parser(errors.DBError()), 404)
+		loggerx.Error(err)
+		errorx.Render(w, errorx.Parser(errorx.DBError()))
 		return
 	}
 
@@ -98,7 +117,22 @@ func update(w http.ResponseWriter, r *http.Request) {
 		postSlug = slug.Approve(slug.Make(post.Title), sID, config.DB.NewScope(&model.Post{}).TableName())
 	}
 
-	config.DB.Model(&result.Post).Updates(model.Post{
+	// Deleting old associations
+	if len(oldTags) > 0 {
+		config.DB.Model(&result.Post).Association("Tags").Delete(oldTags)
+	}
+	if len(oldCategories) > 0 {
+		config.DB.Model(&result.Post).Association("Categories").Delete(oldCategories)
+	}
+
+	if len(newTags) == 0 {
+		newTags = nil
+	}
+	if len(newCategories) == 0 {
+		newCategories = nil
+	}
+
+	config.DB.Model(&result.Post).Set("gorm:association_autoupdate", false).Updates(model.Post{
 		Title:            post.Title,
 		Slug:             postSlug,
 		Status:           post.Status,
@@ -111,153 +145,117 @@ func update(w http.ResponseWriter, r *http.Request) {
 		FormatID:         post.FormatID,
 		FeaturedMediumID: post.FeaturedMediumID,
 		PublishedDate:    post.PublishedDate,
-		Base: config.Base{
-			UpdatedByID: &uID,
-		},
-	})
+		Tags:             newTags,
+		Categories:       newCategories,
+	}).Preload("Medium").Preload("Format").First(&result.Post)
 
-	config.DB.Model(&model.Post{}).Preload("Medium").Preload("Format").First(&result.Post)
-
-	// fetch all categories
-	config.DB.Model(&model.PostCategory{}).Where(&model.PostCategory{
-		PostID: uint(id),
-	}).Preload("Category").Preload("Category.Medium").Find(&categories)
-
-	// fetch all tags
-	config.DB.Model(&model.PostTag{}).Where(&model.PostTag{
-		PostID: uint(id),
-	}).Preload("Tag").Find(&tags)
-
-	// fetch all authors
+	// fetch existing post authors
 	config.DB.Model(&model.PostAuthor{}).Where(&model.PostAuthor{
 		PostID: uint(id),
 	}).Find(&postAuthors)
 
-	// delete tags
-	for _, t := range tags {
-		present := false
-		for _, id := range post.TagIDS {
-			if t.TagID == id {
-				present = true
-			}
-		}
-		if present == false {
-			config.DB.Where(&model.PostTag{
-				TagID:  t.TagID,
-				PostID: uint(id),
-			}).Delete(model.PostTag{})
-		}
-	}
+	var toCreateIDs []uint
+	var toDeleteIDs []uint
 
-	// creating new tags
-	for _, id := range post.TagIDS {
-		present := false
-		for _, t := range tags {
-			if t.TagID == id {
-				present = true
-				result.Tags = append(result.Tags, t.Tag)
-			}
+	if result.Post.Format.Slug == "factcheck" {
+		// fetch existing post claims
+		config.DB.Model(&factcheckModel.PostClaim{}).Where(&factcheckModel.PostClaim{
+			PostID: uint(id),
+		}).Find(&postClaims)
+
+		prevClaimIDs := make([]uint, 0)
+		mapperPostClaim := map[uint]factcheckModel.PostClaim{}
+		postClaimIDs := make([]uint, 0)
+
+		for _, postClaim := range postClaims {
+			mapperPostClaim[postClaim.ClaimID] = postClaim
+			prevClaimIDs = append(prevClaimIDs, postClaim.ClaimID)
 		}
-		if present == false {
-			postTag := &model.PostTag{}
-			postTag.TagID = uint(id)
-			postTag.PostID = result.ID
 
-			err = config.DB.Model(&model.PostTag{}).Create(&postTag).Error
+		toCreateIDs, toDeleteIDs = arrays.Difference(prevClaimIDs, post.ClaimIDs)
 
+		// map post claim ids
+		for _, id := range toDeleteIDs {
+			postClaimIDs = append(postClaimIDs, mapperPostClaim[id].ID)
+		}
+
+		// delete post claims
+		if len(postClaimIDs) > 0 {
+			config.DB.Where(postClaimIDs).Delete(factcheckModel.PostClaim{})
+		}
+
+		for _, id := range toCreateIDs {
+			postClaim := &factcheckModel.PostClaim{}
+			postClaim.ClaimID = uint(id)
+			postClaim.PostID = result.ID
+
+			err = config.DB.Model(&factcheckModel.PostClaim{}).Create(&postClaim).Error
 			if err != nil {
+				errorx.Render(w, errorx.Parser(errorx.DBError()))
 				return
 			}
-			config.DB.Model(&model.PostTag{}).Preload("Tag").First(&postTag)
-			result.Tags = append(result.Tags, postTag.Tag)
 		}
+
+		// fetch updated post claims
+		updatedPostClaims := []factcheckModel.PostClaim{}
+		config.DB.Model(&factcheckModel.PostClaim{}).Where(&factcheckModel.PostClaim{
+			PostID: uint(id),
+		}).Preload("Claim").Preload("Claim.Claimant").Preload("Claim.Claimant.Medium").Preload("Claim.Rating").Preload("Claim.Rating.Medium").Find(&updatedPostClaims)
+
+		// appending previous post claims to result
+		for _, postClaim := range updatedPostClaims {
+			result.Claims = append(result.Claims, postClaim.Claim)
+		}
+
 	}
 
-	// delete categories
-	for _, c := range categories {
-		present := false
-		for _, id := range post.CategoryIDS {
-			if c.CategoryID == id {
-				present = true
-			}
-		}
-		if present == false {
-			config.DB.Where(&model.PostCategory{
-				CategoryID: c.CategoryID,
-				PostID:     uint(id),
-			}).Delete(model.PostCategory{})
-		}
+	prevAuthorIDs := make([]uint, 0)
+	mapperPostAuthor := map[uint]model.PostAuthor{}
+	postAuthorIDs := make([]uint, 0)
+
+	for _, postAuthor := range postAuthors {
+		mapperPostAuthor[postAuthor.AuthorID] = postAuthor
+		prevAuthorIDs = append(prevAuthorIDs, postAuthor.AuthorID)
 	}
 
-	// creating new categories
-	for _, id := range post.CategoryIDS {
-		present := false
-		for _, c := range categories {
-			if c.CategoryID == id {
-				present = true
-				result.Categories = append(result.Categories, c.Category)
-			}
-		}
-		if present == false {
-			postCategory := &model.PostCategory{}
-			postCategory.CategoryID = uint(id)
-			postCategory.PostID = result.ID
+	toCreateIDs, toDeleteIDs = arrays.Difference(prevAuthorIDs, post.AuthorIDs)
 
-			err = config.DB.Model(&model.PostCategory{}).Create(&postCategory).Error
-
-			if err != nil {
-				return
-			}
-
-			config.DB.Model(&model.PostCategory{}).Preload("Category").Preload("Category.Medium").First(&postCategory)
-			result.Categories = append(result.Categories, postCategory.Category)
-		}
+	// map post author ids
+	for _, id := range toDeleteIDs {
+		postAuthorIDs = append(postAuthorIDs, mapperPostAuthor[id].ID)
 	}
 
 	// delete post authors
-	for _, a := range postAuthors {
-		present := false
-		for _, id := range post.AuthorIDS {
-			if a.AuthorID == id {
-				present = true
-			}
-		}
-		if present == false {
-			config.DB.Where(&model.PostAuthor{
-				AuthorID: a.AuthorID,
-				PostID:   uint(id),
-			}).Delete(model.PostAuthor{})
-		}
+	if len(postAuthorIDs) > 0 {
+		config.DB.Where(postAuthorIDs).Delete(model.PostAuthor{})
 	}
 
 	// creating new post authors
-	for _, id := range post.AuthorIDS {
-		present := false
-		for _, postAuthor := range postAuthors {
-			if postAuthor.AuthorID == id {
-				present = true
-				aID := fmt.Sprint(postAuthor.AuthorID)
+	for _, id := range toCreateIDs {
+		postAuthor := &model.PostAuthor{}
+		postAuthor.AuthorID = uint(id)
+		postAuthor.PostID = result.ID
 
-				if authors[aID].Email != "" {
-					result.Authors = append(result.Authors, authors[aID])
-				}
-			}
+		err = config.DB.Model(&model.PostAuthor{}).Create(&postAuthor).Error
+
+		if err != nil {
+			errorx.Render(w, errorx.Parser(errorx.DBError()))
+			return
 		}
-		if present == false {
-			postAuthor := &model.PostAuthor{}
-			postAuthor.AuthorID = uint(id)
-			postAuthor.PostID = result.ID
+	}
 
-			err = config.DB.Model(&model.PostAuthor{}).Create(&postAuthor).Error
+	// fetch existing post authors
+	updatedPostAuthors := []model.PostAuthor{}
+	config.DB.Model(&model.PostAuthor{}).Where(&model.PostAuthor{
+		PostID: uint(id),
+	}).Find(&updatedPostAuthors)
 
-			if err != nil {
-				return
-			}
-			aID := fmt.Sprint(postAuthor.AuthorID)
+	// appending previous post authors to result
+	for _, postAuthor := range updatedPostAuthors {
+		aID := fmt.Sprint(postAuthor.AuthorID)
 
-			if authors[aID].Email != "" {
-				result.Authors = append(result.Authors, authors[aID])
-			}
+		if author, found := authors[aID]; found {
+			result.Authors = append(result.Authors, author)
 		}
 	}
 
