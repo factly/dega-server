@@ -25,7 +25,7 @@ import (
 // @Produce json
 // @Param X-User header string true "User ID"
 // @Param X-Space header string true "Space ID"
-// @Param space_id header string true "Space ID"
+// @Param space_id path string true "Space ID"
 // @Param Space body space true "Space Object"
 // @Success 200 {object} model.Space
 // @Router /core/spaces/{space_id} [put]
@@ -97,6 +97,9 @@ func update(w http.ResponseWriter, r *http.Request) {
 		VerificationCodes: space.VerificationCodes,
 		SocialMediaURLs:   space.SocialMediaURLs,
 		ContactInfo:       space.ContactInfo,
+		Base: config.Base{
+			UpdatedByID: uint(uID),
+		},
 	}).Preload("Logo").Preload("LogoMobile").Preload("FavIcon").Preload("MobileIcon").First(&result).Error
 
 	if err != nil {

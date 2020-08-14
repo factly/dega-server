@@ -13,6 +13,7 @@ import (
 	"github.com/factly/x/errorx"
 	"github.com/factly/x/loggerx"
 	"github.com/factly/x/renderx"
+	"github.com/go-chi/chi"
 )
 
 // delete - Delete space
@@ -24,7 +25,7 @@ import (
 // @Produce json
 // @Param X-User header string true "User ID"
 // @Param X-Space header string true "Space ID"
-// @Param space_id header string true "Space ID"
+// @Param space_id path string true "Space ID"
 // @Success 200
 // @Router /core/spaces/{space_id} [delete]
 func delete(w http.ResponseWriter, r *http.Request) {
@@ -35,10 +36,17 @@ func delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sID, err := util.GetSpace(r.Context())
+	spaceID := chi.URLParam(r, "space_id")
+	id, err := strconv.Atoi(spaceID)
 
-	result := &model.Space{}
-	result.ID = uint(sID)
+	if err != nil {
+		loggerx.Error(err)
+		errorx.Render(w, errorx.Parser(errorx.InvalidID()))
+		return
+	}
+
+	result := model.Space{}
+	result.ID = uint(id)
 
 	// check record exists or not
 	err = config.DB.First(&result).Error

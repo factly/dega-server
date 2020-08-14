@@ -39,7 +39,8 @@ func update(w http.ResponseWriter, r *http.Request) {
 
 	uID, err := util.GetUser(r.Context())
 	if err != nil {
-		errors.Render(w, errors.Parser(errors.InternalServerError()), 500)
+		loggerx.Error(err)
+		errorx.Render(w, errorx.Parser(errorx.InternalServerError()))
 		return
 	}
 
@@ -83,7 +84,7 @@ func update(w http.ResponseWriter, r *http.Request) {
 		Slug:        formatSlug,
 		Description: format.Description,
 		Base: config.Base{
-			UpdatedByID: &uID,
+			UpdatedByID: uint(uID),
 		},
 	}).First(&result)
 

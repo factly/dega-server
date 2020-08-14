@@ -102,6 +102,8 @@ func create(w http.ResponseWriter, r *http.Request) {
 		ContactInfo:       space.ContactInfo,
 	}
 
+	result.CreatedByID = uint(uID)
+
 	err = config.DB.Create(&result).Error
 
 	if err != nil {

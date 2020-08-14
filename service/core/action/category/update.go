@@ -40,7 +40,8 @@ func update(w http.ResponseWriter, r *http.Request) {
 
 	uID, err := util.GetUser(r.Context())
 	if err != nil {
-		errors.Render(w, errors.Parser(errors.InternalServerError()), 500)
+		loggerx.Error(err)
+		errorx.Render(w, errorx.Parser(errorx.InternalServerError()))
 		return
 	}
 
@@ -93,6 +94,9 @@ func update(w http.ResponseWriter, r *http.Request) {
 		Description: category.Description,
 		ParentID:    category.ParentID,
 		MediumID:    category.MediumID,
+		Base: config.Base{
+			UpdatedByID: uint(uID),
+		},
 	}).Preload("Medium").First(&result).Error
 
 	if err != nil {

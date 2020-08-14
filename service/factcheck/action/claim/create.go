@@ -39,7 +39,8 @@ func create(w http.ResponseWriter, r *http.Request) {
 
 	uID, err := util.GetUser(r.Context())
 	if err != nil {
-		errors.Render(w, errors.Parser(errors.InternalServerError()), 500)
+		loggerx.Error(err)
+		errorx.Render(w, errorx.Parser(errorx.InternalServerError()))
 		return
 	}
 
@@ -82,7 +83,7 @@ func create(w http.ResponseWriter, r *http.Request) {
 		ReviewSources: claim.ReviewSources,
 		SpaceID:       uint(sID),
 	}
-	result.CreatedByID = &uID
+	result.CreatedByID = uint(uID)
 
 	err = config.DB.Model(&model.Claim{}).Create(&result).Error
 

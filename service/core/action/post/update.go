@@ -52,7 +52,8 @@ func update(w http.ResponseWriter, r *http.Request) {
 
 	uID, err := util.GetUser(r.Context())
 	if err != nil {
-		errors.Render(w, errors.Parser(errors.InternalServerError()), 500)
+		loggerx.Error(err)
+		errorx.Render(w, errorx.Parser(errorx.InternalServerError()))
 		return
 	}
 
@@ -147,6 +148,9 @@ func update(w http.ResponseWriter, r *http.Request) {
 		PublishedDate:    post.PublishedDate,
 		Tags:             newTags,
 		Categories:       newCategories,
+		Base: config.Base{
+			UpdatedByID: uint(uID),
+		},
 	}).Preload("Medium").Preload("Format").First(&result.Post)
 
 	// fetch existing post authors

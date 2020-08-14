@@ -41,7 +41,8 @@ func create(w http.ResponseWriter, r *http.Request) {
 
 	uID, err := util.GetUser(r.Context())
 	if err != nil {
-		errors.Render(w, errors.Parser(errors.InternalServerError()), 500)
+		loggerx.Error(err)
+		errorx.Render(w, errorx.Parser(errorx.InternalServerError()))
 		return
 	}
 
@@ -91,7 +92,7 @@ func create(w http.ResponseWriter, r *http.Request) {
 		SpaceID:          post.SpaceID,
 	}
 
-	result.CreatedByID = &uID
+	result.CreatedByID = uint(uID)
 
 	// check categories, tags & medium belong to same space or not
 	err = post.CheckSpace(config.DB)

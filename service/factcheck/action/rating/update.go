@@ -37,6 +37,13 @@ func update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	uID, err := util.GetUser(r.Context())
+	if err != nil {
+		loggerx.Error(err)
+		errorx.Render(w, errorx.Parser(errorx.InternalServerError()))
+		return
+	}
+
 	ratingID := chi.URLParam(r, "rating_id")
 	id, err := strconv.Atoi(ratingID)
 
@@ -79,7 +86,7 @@ func update(w http.ResponseWriter, r *http.Request) {
 		MediumID:    rating.MediumID,
 		Description: rating.Description,
 		Base: config.Base{
-			UpdatedByID: &uID,
+			UpdatedByID: uint(uID),
 		},
 	}).Preload("Medium").First(&result)
 

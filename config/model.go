@@ -8,6 +8,6 @@ type Base struct {
 	CreatedAt   time.Time  `json:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at"`
 	DeletedAt   *time.Time `sql:"index" json:"deleted_at"`
-	CreatedByID *int       `json:"created_by_id"`
-	UpdatedByID *int       `json:"updated_by_id"`
+	CreatedByID uint       `json:"created_by_id"`
+	UpdatedByID uint       `json:"updated_by_id"`
 }
