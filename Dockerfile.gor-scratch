@@ -1,0 +1,3 @@
+FROM scratch
+COPY dega-server /
+ENTRYPOINT ["/dega-server"]

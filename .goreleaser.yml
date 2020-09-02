@@ -1,0 +1,66 @@
+# This is an example goreleaser.yaml file with some sane defaults.
+# Make sure to check the documentation at http://goreleaser.com
+before:
+  hooks:
+    # You may remove this if you don't use go modules.
+    - go mod download
+    # you may remove this if you don't need go generate
+    # - go generate ./...
+builds:
+  - env:
+      - CGO_ENABLED=0
+    binary: dega-server
+    goarch:
+      - amd64
+      - 386
+      - arm
+      - arm64
+    goarm:
+      - 5
+      - 6
+      - 7
+    goos:
+      - freebsd
+      - linux
+      - windows
+      - darwin
+archives:
+  - builds:
+      - dega-server
+    id: dega-server-archive
+    replacements:
+      amd64: 64-bit
+      386: 32-bit
+      darwin: macOS
+    format_overrides:
+      - goos: windows
+        format: zip
+checksum:
+  name_template: 'checksums.txt'
+snapshot:
+  name_template: "{{ .Tag }}-next"
+changelog:
+  sort: asc
+
+dockers:
+  - dockerfile: Dockerfile.gor-scratch
+    binaries:
+      - dega-server
+    image_templates:
+      - "deshetti/dega-server:{{ .Major }}"
+      - "deshetti/dega-server:{{ .Major }}.{{ .Minor }}"
+      - "deshetti/dega-server:{{ .Major }}.{{ .Minor }}.{{ .Patch }}"
+      - "deshetti/dega-server:{{ .Tag }}"
+      - "deshetti/dega-server:latest"
+  - dockerfile: Dockerfile.gor-alpine
+    binaries:
+      - dega-server
+    image_templates:
+      - "deshetti/dega-server:{{ .Major }}-alpine"
+      - "deshetti/dega-server:{{ .Major }}.{{ .Minor }}-alpine"
+      - "deshetti/dega-server:{{ .Major }}.{{ .Minor }}.{{ .Patch }}-alpine"
+      - "deshetti/dega-server:{{ .Tag }}-alpine"
+      - "deshetti/dega-server:latest-alpine"
+
+release:
+  prerelease: auto
