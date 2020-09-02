@@ -21,7 +21,7 @@ RUN go build -o ./out/dega-server .
 
 # Start fresh from a smaller image
 FROM alpine:3.12 
-RUN apk add ca-certificates
+RUN apk add --no-cache ca-certificates
 
 COPY --from=build_base /tmp/dega-server/out/dega-server /app/dega-server
 
