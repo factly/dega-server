@@ -14,14 +14,9 @@ var headers = map[string]string{
 	"X-User":  "1",
 }
 
-var data = map[string]interface{}{
-	"name": "Article",
-	"slug": "article",
-}
-
-var dataWithoutSlug = map[string]interface{}{
-	"name": "Article",
-	"slug": "",
+var Data = map[string]interface{}{
+	"name": "Factcheck",
+	"slug": "factcheck",
 }
 
 var invalidData = map[string]interface{}{
@@ -39,18 +34,17 @@ var path = "/core/formats/{format_id}"
 
 func slugCheckMock(mock sqlmock.Sqlmock) {
 	mock.ExpectQuery(regexp.QuoteMeta(`SELECT slug, space_id FROM "formats"`)).
-		WithArgs(fmt.Sprint(data["slug"], "%"), 1).
+		WithArgs(fmt.Sprint(Data["slug"], "%"), 1).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "created_at", "updated_at", "deleted_at", "space_id", "name", "slug"}))
 }
 
 func formatInsertMock(mock sqlmock.Sqlmock) {
 	mock.ExpectBegin()
 	mock.ExpectQuery(`INSERT INTO "formats"`).
-		WithArgs(test.AnyTime{}, test.AnyTime{}, nil, data["name"], data["slug"], "", 1).
+		WithArgs(test.AnyTime{}, test.AnyTime{}, nil, Data["name"], Data["slug"], "", 1).
 		WillReturnRows(sqlmock.
 			NewRows([]string{"id"}).
 			AddRow(1))
-	mock.ExpectCommit()
 }
 
 //check format exits or not
@@ -60,11 +54,18 @@ func recordNotFoundMock(mock sqlmock.Sqlmock) {
 		WillReturnRows(sqlmock.NewRows(columns))
 }
 
-func formatSelectMock(mock sqlmock.Sqlmock) {
+func SelectWithSpace(mock sqlmock.Sqlmock) {
 	mock.ExpectQuery(selectQuery).
 		WithArgs(1, 1).
 		WillReturnRows(sqlmock.NewRows(columns).
-			AddRow(1, time.Now(), time.Now(), nil, data["name"], data["slug"]))
+			AddRow(1, time.Now(), time.Now(), nil, Data["name"], Data["slug"]))
+}
+
+func SelectWithOutSpace(mock sqlmock.Sqlmock) {
+	mock.ExpectQuery(selectQuery).
+		WithArgs(1).
+		WillReturnRows(sqlmock.NewRows(columns).
+			AddRow(1, time.Now(), time.Now(), nil, Data["name"], Data["slug"]))
 }
 
 // check whether format is associated with any post before deleting
@@ -79,7 +80,6 @@ func formatUpdateMock(mock sqlmock.Sqlmock, format map[string]interface{}) {
 	mock.ExpectExec(`UPDATE \"formats\" SET (.+)  WHERE (.+) \"formats\".\"id\" = `).
 		WithArgs(format["name"], format["slug"], test.AnyTime{}, 1).
 		WillReturnResult(sqlmock.NewResult(1, 1))
-	mock.ExpectCommit()
 }
 
 func formatCountQuery(mock sqlmock.Sqlmock, count int) {

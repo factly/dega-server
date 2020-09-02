@@ -7,8 +7,10 @@ import (
 
 	"github.com/factly/dega-server/service"
 	"github.com/factly/dega-server/test"
+	"github.com/factly/dega-server/test/service/core/category"
 	"github.com/factly/dega-server/test/service/core/format"
 	"github.com/factly/dega-server/test/service/core/medium"
+	"github.com/factly/dega-server/test/service/core/tag"
 	"github.com/gavv/httpexpect/v2"
 	"gopkg.in/h2non/gock.v1"
 )
@@ -16,6 +18,9 @@ import (
 func TestClaimCreate(t *testing.T) {
 
 	mock := test.SetupMockDB()
+
+	test.MockServer()
+	defer gock.DisableNetworking()
 
 	testServer := httptest.NewServer(service.RegisterRoutes())
 	gock.New(testServer.URL).EnableNetworking().Persist()
@@ -54,16 +59,15 @@ func TestClaimCreate(t *testing.T) {
 
 		slugCheckMock(mock, Data)
 
-		postTagMock(mock)
-		postCategoryMock(mock)
+		tag.SelectWithOutSpace(mock, tag.Data)
+		category.SelectWithOutSpace(mock)
 
 		postInsertMock(mock)
-
 		postSelectWithOutSpace(mock, Data)
-
 		postClaimInsertMock(mock)
 		postClaimSelectMock(mock)
 		postAuthorInsertMock(mock)
+		mock.ExpectCommit()
 
 		e.POST(basePath).
 			WithHeaders(headers).
@@ -81,8 +85,8 @@ func TestClaimCreate(t *testing.T) {
 
 		slugCheckMock(mock, Data)
 
-		postTagMock(mock)
-		postCategoryMock(mock)
+		tag.SelectWithOutSpace(mock, tag.Data)
+		category.SelectWithOutSpace(mock)
 
 		postInsertMock(mock)
 
@@ -90,13 +94,15 @@ func TestClaimCreate(t *testing.T) {
 		postClaimInsertMock(mock)
 		postClaimSelectMock(mock)
 		postAuthorInsertMock(mock)
+		mock.ExpectCommit()
 
+		Data["slug"] = ""
 		e.POST(basePath).
 			WithHeaders(headers).
-			WithJSON(dataWithoutSlug).
+			WithJSON(Data).
 			Expect().
 			Status(http.StatusCreated).JSON().Object().ContainsMap(postData)
-
+		Data["slug"] = "post"
 		test.ExpectationsMet(t, mock)
 	})
 
@@ -106,15 +112,15 @@ func TestClaimCreate(t *testing.T) {
 
 		slugCheckMock(mock, Data)
 
-		postTagMock(mock)
-		postCategoryMock(mock)
+		tag.SelectWithOutSpace(mock, tag.Data)
+		category.SelectWithOutSpace(mock)
 		mock.ExpectBegin()
 		medium.EmptyRowMock(mock)
 		mock.ExpectRollback()
 
 		e.POST(basePath).
 			WithHeaders(headers).
-			WithJSON(dataWithoutSlug).
+			WithJSON(Data).
 			Expect().
 			Status(http.StatusInternalServerError)
 
@@ -126,8 +132,8 @@ func TestClaimCreate(t *testing.T) {
 
 		slugCheckMock(mock, Data)
 
-		postTagMock(mock)
-		postCategoryMock(mock)
+		tag.SelectWithOutSpace(mock, tag.Data)
+		category.SelectWithOutSpace(mock)
 		mock.ExpectBegin()
 		medium.SelectWithSpace(mock)
 		format.EmptyRowMock(mock)
@@ -135,7 +141,32 @@ func TestClaimCreate(t *testing.T) {
 
 		e.POST(basePath).
 			WithHeaders(headers).
-			WithJSON(dataWithoutSlug).
+			WithJSON(Data).
+			Expect().
+			Status(http.StatusInternalServerError)
+
+		test.ExpectationsMet(t, mock)
+	})
+
+	t.Run("create post when meili is down", func(t *testing.T) {
+		test.DisableMeiliGock(testServer.URL)
+		test.CheckSpaceMock(mock)
+
+		slugCheckMock(mock, Data)
+
+		tag.SelectWithOutSpace(mock, tag.Data)
+		category.SelectWithOutSpace(mock)
+
+		postInsertMock(mock)
+		postSelectWithOutSpace(mock, Data)
+		postClaimInsertMock(mock)
+		postClaimSelectMock(mock)
+		postAuthorInsertMock(mock)
+		mock.ExpectRollback()
+
+		e.POST(basePath).
+			WithHeaders(headers).
+			WithJSON(Data).
 			Expect().
 			Status(http.StatusInternalServerError)
 

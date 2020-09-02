@@ -15,6 +15,9 @@ import (
 func TestFormatDelete(t *testing.T) {
 	mock := test.SetupMockDB()
 
+	test.MockServer()
+	defer gock.DisableNetworking()
+
 	testServer := httptest.NewServer(service.RegisterRoutes())
 	gock.New(testServer.URL).EnableNetworking().Persist()
 	defer gock.DisableNetworking()
@@ -47,7 +50,7 @@ func TestFormatDelete(t *testing.T) {
 
 	t.Run("check format associated with other entity", func(t *testing.T) {
 		test.CheckSpaceMock(mock)
-		formatSelectMock(mock)
+		SelectWithSpace(mock)
 
 		formatPostExpect(mock, 1)
 
@@ -60,7 +63,7 @@ func TestFormatDelete(t *testing.T) {
 
 	t.Run("format record deleted", func(t *testing.T) {
 		test.CheckSpaceMock(mock)
-		formatSelectMock(mock)
+		SelectWithSpace(mock)
 
 		formatPostExpect(mock, 0)
 
@@ -77,4 +80,23 @@ func TestFormatDelete(t *testing.T) {
 			Status(http.StatusOK)
 	})
 
+	t.Run("delete when meili is down", func(t *testing.T) {
+		test.DisableMeiliGock(testServer.URL)
+		test.CheckSpaceMock(mock)
+		SelectWithSpace(mock)
+
+		formatPostExpect(mock, 0)
+
+		mock.ExpectBegin()
+		mock.ExpectExec(deleteQuery).
+			WithArgs(test.AnyTime{}, 1).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+		mock.ExpectRollback()
+
+		e.DELETE(path).
+			WithPath("format_id", 1).
+			WithHeaders(headers).
+			Expect().
+			Status(http.StatusInternalServerError)
+	})
 }

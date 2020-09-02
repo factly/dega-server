@@ -15,6 +15,9 @@ func TestFormatCreate(t *testing.T) {
 
 	mock := test.SetupMockDB()
 
+	test.MockServer()
+	defer gock.DisableNetworking()
+
 	testServer := httptest.NewServer(service.RegisterRoutes())
 	gock.New(testServer.URL).EnableNetworking().Persist()
 	defer gock.DisableNetworking()
@@ -53,12 +56,13 @@ func TestFormatCreate(t *testing.T) {
 		slugCheckMock(mock)
 
 		formatInsertMock(mock)
+		mock.ExpectCommit()
 
 		e.POST(basePath).
 			WithHeaders(headers).
-			WithJSON(data).
+			WithJSON(Data).
 			Expect().
-			Status(http.StatusCreated).JSON().Object().ContainsMap(data)
+			Status(http.StatusCreated).JSON().Object().ContainsMap(Data)
 		test.ExpectationsMet(t, mock)
 
 	})
@@ -70,14 +74,35 @@ func TestFormatCreate(t *testing.T) {
 		slugCheckMock(mock)
 
 		formatInsertMock(mock)
+		mock.ExpectCommit()
 
-		e.POST(basePath).
+		Data["slug"] = ""
+		res := e.POST(basePath).
 			WithHeaders(headers).
-			WithJSON(dataWithoutSlug).
+			WithJSON(Data).
 			Expect().
-			Status(http.StatusCreated).JSON().Object().ContainsMap(data)
+			Status(http.StatusCreated).JSON().Object()
+		Data["slug"] = "factcheck"
+		res.ContainsMap(Data)
 
 		test.ExpectationsMet(t, mock)
 	})
 
+	t.Run("create format when meili is down", func(t *testing.T) {
+		test.DisableMeiliGock(testServer.URL)
+		test.CheckSpaceMock(mock)
+
+		slugCheckMock(mock)
+
+		formatInsertMock(mock)
+		mock.ExpectRollback()
+
+		e.POST(basePath).
+			WithHeaders(headers).
+			WithJSON(Data).
+			Expect().
+			Status(http.StatusInternalServerError)
+		test.ExpectationsMet(t, mock)
+
+	})
 }

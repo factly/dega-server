@@ -15,6 +15,9 @@ import (
 func TestCategoryUpdate(t *testing.T) {
 	mock := test.SetupMockDB()
 
+	test.MockServer()
+	defer gock.DisableNetworking()
+
 	testServer := httptest.NewServer(service.RegisterRoutes())
 	gock.New(testServer.URL).EnableNetworking().Persist()
 	defer gock.DisableNetworking()
@@ -76,6 +79,7 @@ func TestCategoryUpdate(t *testing.T) {
 		selectWithSpace(mock)
 
 		updateMock(mock)
+		mock.ExpectCommit()
 
 		e.PUT(path).
 			WithPath("category_id", 1).
@@ -94,6 +98,7 @@ func TestCategoryUpdate(t *testing.T) {
 		slugCheckMock(mock, Data)
 
 		updateMock(mock)
+		mock.ExpectCommit()
 
 		Data["slug"] = ""
 		res := e.PUT(path).
@@ -134,11 +139,11 @@ func TestCategoryUpdate(t *testing.T) {
 		mock.ExpectExec(`UPDATE \"categories\" SET (.+)  WHERE (.+) \"categories\".\"id\" = `).
 			WithArgs(nil, test.AnyTime{}, 1).
 			WillReturnResult(sqlmock.NewResult(1, 1))
-		SelectWithoutSpace(mock)
+		SelectWithOutSpace(mock)
 		mock.ExpectExec(`UPDATE \"categories\" SET (.+)  WHERE (.+) \"categories\".\"id\" = `).
 			WithArgs(Data["description"], Data["name"], Data["slug"], test.AnyTime{}, 1).
 			WillReturnResult(sqlmock.NewResult(1, 1))
-		SelectWithoutSpace(mock)
+		SelectWithOutSpace(mock)
 		mock.ExpectCommit()
 
 		res := e.PUT(path).
@@ -147,9 +152,27 @@ func TestCategoryUpdate(t *testing.T) {
 			WithJSON(Data).
 			Expect().
 			Status(http.StatusOK).JSON().Object()
-		Data["medium_id"] = 0
-
 		res.ContainsMap(Data)
+		Data["medium_id"] = 1
+
+		test.ExpectationsMet(t, mock)
+	})
+
+	t.Run("update category when meili is down", func(t *testing.T) {
+		test.DisableMeiliGock(testServer.URL)
+		test.CheckSpaceMock(mock)
+
+		selectWithSpace(mock)
+
+		updateMock(mock)
+		mock.ExpectRollback()
+
+		e.PUT(path).
+			WithPath("category_id", 1).
+			WithHeaders(headers).
+			WithJSON(Data).
+			Expect().
+			Status(http.StatusInternalServerError)
 		test.ExpectationsMet(t, mock)
 	})
 }

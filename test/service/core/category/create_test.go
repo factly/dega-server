@@ -17,6 +17,9 @@ func TestCategoryCreate(t *testing.T) {
 
 	mock := test.SetupMockDB()
 
+	test.MockServer()
+	defer gock.DisableNetworking()
+
 	testServer := httptest.NewServer(service.RegisterRoutes())
 	gock.New(testServer.URL).EnableNetworking().Persist()
 	defer gock.DisableNetworking()
@@ -53,9 +56,9 @@ func TestCategoryCreate(t *testing.T) {
 		slugCheckMock(mock, Data)
 
 		insertMock(mock)
-		SelectWithoutSpace(mock)
-
+		SelectWithOutSpace(mock)
 		medium.SelectWithOutSpace(mock)
+		mock.ExpectCommit()
 
 		e.POST(basePath).
 			WithHeaders(headers).
@@ -90,13 +93,14 @@ func TestCategoryCreate(t *testing.T) {
 
 		insertMock(mock)
 
-		SelectWithoutSpace(mock)
-
+		SelectWithOutSpace(mock)
 		medium.SelectWithOutSpace(mock)
+		mock.ExpectCommit()
+
 		Data["slug"] = ""
 		res := e.POST(basePath).
 			WithHeaders(headers).
-			WithJSON(dataWithoutSlug).
+			WithJSON(Data).
 			Expect().
 			Status(http.StatusCreated).JSON().Object()
 		Data["slug"] = "test-category"
@@ -134,5 +138,25 @@ func TestCategoryCreate(t *testing.T) {
 			Status(http.StatusInternalServerError)
 
 		test.ExpectationsMet(t, mock)
+	})
+
+	t.Run("create category when meili is down", func(t *testing.T) {
+		test.DisableMeiliGock(testServer.URL)
+		test.CheckSpaceMock(mock)
+
+		slugCheckMock(mock, Data)
+
+		insertMock(mock)
+		SelectWithOutSpace(mock)
+		medium.SelectWithOutSpace(mock)
+		mock.ExpectRollback()
+
+		e.POST(basePath).
+			WithHeaders(headers).
+			WithJSON(Data).
+			Expect().
+			Status(http.StatusInternalServerError)
+		test.ExpectationsMet(t, mock)
+
 	})
 }

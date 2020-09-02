@@ -14,15 +14,11 @@ import (
 	"gopkg.in/h2non/gock.v1"
 )
 
-func selectAfterUpdate(mock sqlmock.Sqlmock, tag map[string]interface{}) {
-	mock.ExpectQuery(selectQuery).
-		WithArgs(1).
-		WillReturnRows(sqlmock.NewRows(columns).
-			AddRow(1, time.Now(), time.Now(), nil, tag["name"], tag["slug"]))
-}
-
 func TestTagUpdate(t *testing.T) {
 	mock := test.SetupMockDB()
+
+	test.MockServer()
+	defer gock.DisableNetworking()
 
 	testServer := httptest.NewServer(service.RegisterRoutes())
 	gock.New(testServer.URL).EnableNetworking().Persist()
@@ -54,7 +50,7 @@ func TestTagUpdate(t *testing.T) {
 	t.Run("Unable to decode tag data", func(t *testing.T) {
 
 		test.CheckSpaceMock(mock)
-		tagSelectMock(mock)
+		SelectWithSpaceMock(mock)
 
 		e.PUT(path).
 			WithPath("tag_id", 1).
@@ -67,7 +63,7 @@ func TestTagUpdate(t *testing.T) {
 	t.Run("Unprocessable tag", func(t *testing.T) {
 
 		test.CheckSpaceMock(mock)
-		tagSelectMock(mock)
+		SelectWithSpaceMock(mock)
 
 		e.PUT(path).
 			WithPath("tag_id", 1).
@@ -85,11 +81,10 @@ func TestTagUpdate(t *testing.T) {
 			"slug": "elections",
 		}
 
-		tagSelectMock(mock)
+		SelectWithSpaceMock(mock)
 
 		tagUpdateMock(mock, updatedTag)
-
-		selectAfterUpdate(mock, updatedTag)
+		mock.ExpectCommit()
 
 		e.PUT(path).
 			WithPath("tag_id", 1).
@@ -106,24 +101,24 @@ func TestTagUpdate(t *testing.T) {
 			"name": "Elections",
 			"slug": "elections-1",
 		}
-		tagSelectMock(mock)
+		SelectWithSpaceMock(mock)
 
 		mock.ExpectQuery(`SELECT slug, space_id FROM "tags"`).
 			WithArgs("elections%", 1).
-			WillReturnRows(sqlmock.NewRows(columns).
-				AddRow(1, time.Now(), time.Now(), nil, updatedTag["name"], "elections"))
+			WillReturnRows(sqlmock.NewRows(Columns).
+				AddRow(1, time.Now(), time.Now(), nil, updatedTag["name"], "elections", 1))
 
 		tagUpdateMock(mock, updatedTag)
+		mock.ExpectCommit()
 
-		selectAfterUpdate(mock, updatedTag)
-
+		Data["slug"] = ""
 		e.PUT(path).
 			WithPath("tag_id", 1).
 			WithHeaders(headers).
-			WithJSON(dataWithoutSlug).
+			WithJSON(Data).
 			Expect().
 			Status(http.StatusOK).JSON().Object().ContainsMap(updatedTag)
-
+		Data["slug"] = "elections"
 	})
 
 	t.Run("update tag with different slug", func(t *testing.T) {
@@ -132,15 +127,14 @@ func TestTagUpdate(t *testing.T) {
 			"name": "Elections",
 			"slug": "testing-slug",
 		}
-		tagSelectMock(mock)
+		SelectWithSpaceMock(mock)
 
 		mock.ExpectQuery(`SELECT slug, space_id FROM "tags"`).
 			WithArgs(fmt.Sprint(updatedTag["slug"], "%"), 1).
 			WillReturnRows(sqlmock.NewRows([]string{"slug", "space_id"}))
 
 		tagUpdateMock(mock, updatedTag)
-
-		selectAfterUpdate(mock, updatedTag)
+		mock.ExpectCommit()
 
 		e.PUT(path).
 			WithPath("tag_id", 1).
@@ -151,4 +145,24 @@ func TestTagUpdate(t *testing.T) {
 
 	})
 
+	t.Run("update tag when meili is down", func(t *testing.T) {
+		test.DisableMeiliGock(testServer.URL)
+		test.CheckSpaceMock(mock)
+		updatedTag := map[string]interface{}{
+			"name": "Elections",
+			"slug": "elections",
+		}
+
+		SelectWithSpaceMock(mock)
+
+		tagUpdateMock(mock, updatedTag)
+		mock.ExpectRollback()
+
+		e.PUT(path).
+			WithPath("tag_id", 1).
+			WithHeaders(headers).
+			WithJSON(updatedTag).
+			Expect().
+			Status(http.StatusInternalServerError)
+	})
 }

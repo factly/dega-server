@@ -15,6 +15,9 @@ func TestMediumCreate(t *testing.T) {
 
 	mock := test.SetupMockDB()
 
+	test.MockServer()
+	defer gock.DisableNetworking()
+
 	testServer := httptest.NewServer(service.RegisterRoutes())
 	gock.New(testServer.URL).EnableNetworking().Persist()
 	defer gock.DisableNetworking()
@@ -52,6 +55,7 @@ func TestMediumCreate(t *testing.T) {
 		slugCheckMock(mock, Data)
 
 		mediumInsertMock(mock)
+		mock.ExpectCommit()
 
 		e.POST(basePath).
 			WithHeaders(headers).
@@ -67,14 +71,17 @@ func TestMediumCreate(t *testing.T) {
 		slugCheckMock(mock, Data)
 
 		mediumInsertMock(mock)
+		mock.ExpectCommit()
 
-		e.POST(basePath).
+		Data["slug"] = ""
+		res := e.POST(basePath).
 			WithHeaders(headers).
-			WithJSON(dataWithoutSlug).
+			WithJSON(Data).
 			Expect().
-			Status(http.StatusCreated).JSON().Object().ContainsMap(Data)
+			Status(http.StatusCreated).JSON().Object()
+		Data["slug"] = "image"
+		res.ContainsMap(Data)
 		test.ExpectationsMet(t, mock)
-
 	})
 
 	t.Run("medium does not belong same space", func(t *testing.T) {
@@ -85,11 +92,26 @@ func TestMediumCreate(t *testing.T) {
 
 		e.POST(basePath).
 			WithHeaders(headers).
-			WithJSON(dataWithoutSlug).
+			WithJSON(Data).
 			Expect().
 			Status(http.StatusInternalServerError)
 
 		test.ExpectationsMet(t, mock)
 	})
 
+	t.Run("create medium when meili is down", func(t *testing.T) {
+		test.DisableMeiliGock(testServer.URL)
+		test.CheckSpaceMock(mock)
+		slugCheckMock(mock, Data)
+
+		mediumInsertMock(mock)
+		mock.ExpectRollback()
+
+		e.POST(basePath).
+			WithHeaders(headers).
+			WithJSON(Data).
+			Expect().
+			Status(http.StatusInternalServerError)
+		test.ExpectationsMet(t, mock)
+	})
 }

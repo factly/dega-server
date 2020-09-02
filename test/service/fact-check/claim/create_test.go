@@ -15,6 +15,9 @@ func TestClaimCreate(t *testing.T) {
 
 	mock := test.SetupMockDB()
 
+	test.MockServer()
+	defer gock.DisableNetworking()
+
 	testServer := httptest.NewServer(service.RegisterRoutes())
 	gock.New(testServer.URL).EnableNetworking().Persist()
 	defer gock.DisableNetworking()
@@ -54,6 +57,7 @@ func TestClaimCreate(t *testing.T) {
 
 		claimInsertMock(mock)
 		SelectWithOutSpace(mock, Data)
+		mock.ExpectCommit()
 
 		result := e.POST(basePath).
 			WithHeaders(headers).
@@ -74,12 +78,16 @@ func TestClaimCreate(t *testing.T) {
 
 		claimInsertMock(mock)
 		SelectWithOutSpace(mock, Data)
+		mock.ExpectCommit()
 
+		Data["slug"] = ""
 		result := e.POST(basePath).
 			WithHeaders(headers).
-			WithJSON(dataWithoutSlug).
+			WithJSON(Data).
 			Expect().
-			Status(http.StatusCreated).JSON().Object().ContainsMap(Data)
+			Status(http.StatusCreated).JSON().Object()
+		Data["slug"] = "claim"
+		result.ContainsMap(Data)
 		validateAssociations(result)
 		test.ExpectationsMet(t, mock)
 	})
@@ -94,7 +102,7 @@ func TestClaimCreate(t *testing.T) {
 
 		e.POST(basePath).
 			WithHeaders(headers).
-			WithJSON(dataWithoutSlug).
+			WithJSON(Data).
 			Expect().
 			Status(http.StatusInternalServerError)
 
@@ -110,11 +118,29 @@ func TestClaimCreate(t *testing.T) {
 
 		e.POST(basePath).
 			WithHeaders(headers).
-			WithJSON(dataWithoutSlug).
+			WithJSON(Data).
 			Expect().
 			Status(http.StatusInternalServerError)
 
 		test.ExpectationsMet(t, mock)
 	})
 
+	t.Run("create claim when meili is down", func(t *testing.T) {
+		test.DisableMeiliGock(testServer.URL)
+		test.CheckSpaceMock(mock)
+
+		slugCheckMock(mock, Data)
+
+		claimInsertMock(mock)
+		SelectWithOutSpace(mock, Data)
+		mock.ExpectRollback()
+
+		e.POST(basePath).
+			WithHeaders(headers).
+			WithJSON(Data).
+			Expect().
+			Status(http.StatusInternalServerError)
+		test.ExpectationsMet(t, mock)
+
+	})
 }

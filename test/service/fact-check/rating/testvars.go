@@ -23,14 +23,6 @@ var Data = map[string]interface{}{
 	"medium_id":     uint(1),
 }
 
-var dataWithoutSlug = map[string]interface{}{
-	"name":          "True",
-	"slug":          "",
-	"description":   "article is validated",
-	"numeric_value": 5,
-	"medium_id":     uint(1),
-}
-
 var invalidData = map[string]interface{}{
 	"name":          "a",
 	"numeric_value": 0,
@@ -59,7 +51,6 @@ func ratingInsertMock(mock sqlmock.Sqlmock) {
 		WillReturnRows(sqlmock.
 			NewRows([]string{"id"}).
 			AddRow(1))
-	mock.ExpectCommit()
 }
 
 func ratingInsertError(mock sqlmock.Sqlmock) {
@@ -72,14 +63,12 @@ func ratingUpdateMock(mock sqlmock.Sqlmock, rating map[string]interface{}, err e
 	mock.ExpectBegin()
 	if err != nil {
 		medium.EmptyRowMock(mock)
-		mock.ExpectRollback()
 	} else {
 		medium.SelectWithSpace(mock)
 		mock.ExpectExec(`UPDATE \"ratings\" SET (.+)  WHERE (.+) \"ratings\".\"id\" = `).
 			WithArgs(rating["description"], rating["medium_id"], rating["name"], rating["numeric_value"], rating["slug"], test.AnyTime{}, 1).
 			WillReturnResult(sqlmock.NewResult(1, 1))
 		SelectWithOutSpace(mock, rating)
-		mock.ExpectCommit()
 	}
 
 }

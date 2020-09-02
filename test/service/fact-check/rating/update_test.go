@@ -24,6 +24,9 @@ var updatedRating = map[string]interface{}{
 func TestRatingUpdate(t *testing.T) {
 	mock := test.SetupMockDB()
 
+	test.MockServer()
+	gock.DisableNetworking()
+
 	testServer := httptest.NewServer(service.RegisterRoutes())
 	gock.New(testServer.URL).EnableNetworking().Persist()
 	defer gock.DisableNetworking()
@@ -86,6 +89,7 @@ func TestRatingUpdate(t *testing.T) {
 		SelectWithSpace(mock)
 
 		ratingUpdateMock(mock, updatedRating, nil)
+		mock.ExpectCommit()
 
 		e.PUT(path).
 			WithPath("rating_id", 1).
@@ -104,13 +108,16 @@ func TestRatingUpdate(t *testing.T) {
 		slugCheckMock(mock, Data)
 
 		ratingUpdateMock(mock, updatedRating, nil)
+		mock.ExpectCommit()
 
+		Data["slug"] = ""
 		e.PUT(path).
 			WithPath("rating_id", 1).
 			WithHeaders(headers).
-			WithJSON(dataWithoutSlug).
+			WithJSON(Data).
 			Expect().
 			Status(http.StatusOK).JSON().Object().ContainsMap(updatedRating)
+		Data["slug"] = "true"
 		test.ExpectationsMet(t, mock)
 
 	})
@@ -126,6 +133,7 @@ func TestRatingUpdate(t *testing.T) {
 			WillReturnRows(sqlmock.NewRows([]string{"slug", "space_id"}))
 
 		ratingUpdateMock(mock, updatedRating, nil)
+		mock.ExpectCommit()
 
 		e.PUT(path).
 			WithPath("rating_id", 1).
@@ -148,6 +156,7 @@ func TestRatingUpdate(t *testing.T) {
 			WillReturnRows(sqlmock.NewRows([]string{"slug", "space_id"}))
 
 		ratingUpdateMock(mock, updatedRating, errors.New("record not found"))
+		mock.ExpectRollback()
 
 		e.PUT(path).
 			WithPath("rating_id", 1).
@@ -157,6 +166,25 @@ func TestRatingUpdate(t *testing.T) {
 			Status(http.StatusInternalServerError)
 		test.ExpectationsMet(t, mock)
 
+	})
+
+	t.Run("update rating when meili is down", func(t *testing.T) {
+		test.DisableMeiliGock(testServer.URL)
+		updatedRating["slug"] = "true"
+		test.CheckSpaceMock(mock)
+
+		SelectWithSpace(mock)
+
+		ratingUpdateMock(mock, updatedRating, nil)
+		mock.ExpectRollback()
+
+		e.PUT(path).
+			WithPath("rating_id", 1).
+			WithHeaders(headers).
+			WithJSON(updatedRating).
+			Expect().
+			Status(http.StatusInternalServerError)
+		test.ExpectationsMet(t, mock)
 	})
 
 }
